@@ -16,14 +16,16 @@ dt = 0.001
 position_scale = 1.0/raw_radius
 power_scale = 2.0
 
-n_neurons = 300
+n_neurons = 500
 dimensions = 1
 radius = 1
-adapt_synapse = 0.01
+adapt_synapse = 0.001
 send_synapse = None
 learning_rate = 1e-4
 
-dscale = 0.002
+period = 0.25
+
+dscale = 0.002   # TODO: figure out why this number
 
 
 model = nengo.Network()
@@ -38,7 +40,6 @@ with model:
         return float(link.read(m1+'position'))*position_scale
     read_pos = nengo.Node(read_pos_fn)
 
-    period = 1
     #target = nengo.Node(lambda t: np.cos(t*2*np.pi/period))
     target = nengo.Node(lambda t: 1 if np.cos(t*2*np.pi/period) > 0 else -1)
 

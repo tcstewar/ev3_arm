@@ -5,22 +5,25 @@ import numpy as np
 
 m1 = '/sys/class/tacho-motor/motor1/'
 
+raw_radius = 30
+
 link = ev3link.EV3Link('192.168.0.1')
 link.wait_for_connection()
-link.write(m1+'position', '0')
+link.write(m1+'position', '%d' % raw_radius)
 link.write(m1+'command', 'run-direct')
 
-target_pos = -1.0
-
 dt = 0.001
-position_scale = 1.0/300
-power_scale = 20.0
+position_scale = 1.0/raw_radius
+power_scale = 2.0
 
 n_neurons = 300
 dimensions = 1
 radius = 1
-synapse = 0.01
+adapt_synapse = 0.01
+send_synapse = None
 learning_rate = 1e-4
+
+dscale = 0.002
 
 
 model = nengo.Network()
@@ -36,7 +39,8 @@ with model:
     read_pos = nengo.Node(read_pos_fn)
 
     period = 1
-    target = nengo.Node(lambda t: (-np.cos(t*2*np.pi/period)+1)/2*target_pos)
+    #target = nengo.Node(lambda t: np.cos(t*2*np.pi/period))
+    target = nengo.Node(lambda t: 1 if np.cos(t*2*np.pi/period) > 0 else -1)
 
     controller = pid.PID(Kp=1.0, Kd=10.0, Ki=0.0, tau_d=0.001, dt=dt)
     
@@ -49,24 +53,32 @@ with model:
     nengo.Connection(target, ctrl[1], synapse=None)
 
     # compute the derivative
-    #nengo.Connection(target, ctrl[2], transform=1.0/dt, synapse=None)
-    #nengo.Connection(target, ctrl[2], transform=-1.0/dt, synapse=0)
+    nengo.Connection(target, ctrl[2], transform=dscale/dt, synapse=None)
+    nengo.Connection(target, ctrl[2], transform=-dscale/dt, synapse=0)
 
-    nengo.Connection(ctrl, send_command, synapse=None)
+    nengo.Connection(ctrl, send_command, synapse=send_synapse)
 
 
     adapt = nengo.Ensemble(n_neurons, dimensions=1,
                            radius=radius)
     nengo.Connection(read_pos, adapt, synapse=None)
-    conn = nengo.Connection(adapt, send_command, synapse=synapse,
+    conn = nengo.Connection(adapt, send_command, synapse=adapt_synapse,
                             function=lambda x: [0],
                             learning_rule_type=nengo.PES(learning_rate))
-    nengo.Connection(ctrl, conn.learning_rule, synapse=None, transform=-1)
+
+    def learning_rule_gate_fn(t, x):
+        if np.abs(x) > 1.0:
+            return 0
+        else:
+            return x
+    learning_rule_gate = nengo.Node(learning_rule_gate_fn, size_in=1)
+    nengo.Connection(ctrl, learning_rule_gate, synapse=None)
+    nengo.Connection(learning_rule_gate, conn.learning_rule, synapse=None, transform=-1)
 
 
     import nengo_learning_display
     learn = nengo_learning_display.Plot1D(conn, np.linspace(-1, 1, 50),
-                                          range=(-1, 1))
+                                          range=(-2, 2))
 
 
     compare = nengo.Node(None, size_in=2)

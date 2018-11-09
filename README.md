@@ -9,6 +9,7 @@ nengo
 
 nengo_gui (on `hooks` branch)
 
+ - `pip uninstall nengo-gui`
  - `git clone https://github.com/nengo/nengo-gui`
  - `cd nengo-gui`
  - `git checkout hooks`
